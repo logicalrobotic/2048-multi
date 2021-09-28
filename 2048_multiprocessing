@@ -1,0 +1,154 @@
+from Game2048 import Game2048
+import numpy as np
+import pygame
+import multiprocessing
+import time
+import csv
+
+# Game 2048: Artificial intelligence
+
+# Instructions:
+#   Move up, down, left, or right to merge the tiles. The objective is to 
+#   get a tile with the number 2048 (or higher)
+#
+# Control:
+#    arrows  : Merge up, down, left, or right
+#    r       : Restart game
+#    q / ESC : Quit
+
+def take_turn(actions, init_action, board, score, shared_list, iteration_list):
+    R = 125
+    scores = {}
+    iterations = 0
+    # Loop over initial moves
+    scores[init_action] = 0
+    score_list = []
+    mean_list = []
+    board1 = board
+    score1 = score
+    # Play R games
+    for r in range(R):       
+        # Initialize a simulation in the current game state            
+        sim = Game2048((board1, score1))
+        action = init_action
+        done = False
+        while not done:       
+            (board, score), reward, done = sim.step(action)
+            action = actions[np.random.randint(4)]
+            iterations += 1
+
+        scores[init_action] += score
+    iteration_list.append(iterations)
+
+    shared_list.append(scores[init_action])
+
+if __name__ == "__main__":
+    filename = "C:/Users/Martin/Desktop/DTU/KID/1. semester/Introduktion til intelligente systemer/Python koder/2048/2048_data.csv"
+    num = 1
+    env = Game2048()
+    env.reset()
+    actions = ['left', 'right', 'up', 'down']
+    exit_program = False
+    action_taken = False
+    steps = 0
+    iterations = 0
+    t1 = time.time()
+    while not exit_program:
+        env.render()
+        scores = {}
+        # Process game events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                exit_program = True
+            if event.type == pygame.KEYDOWN:
+                if event.key in [pygame.K_ESCAPE, pygame.K_q]:
+                    exit_program = True
+                if event.key == pygame.K_UP:
+                    action, action_taken = 'up', True
+                if event.key == pygame.K_DOWN:
+                    action, action_taken  = 'down', True
+                if event.key == pygame.K_RIGHT:
+                    action, action_taken  = 'right', True
+                if event.key == pygame.K_LEFT:
+                    action, action_taken  = 'left', True
+                if event.key == pygame.K_r:
+                    env.reset()   
+
+        with multiprocessing.Manager() as manager:
+            shared_list1 = manager.list()
+            shared_list2 = manager.list()
+            shared_list3 = manager.list()
+            shared_list4 = manager.list()
+            iteration_list = manager.list()
+
+            p1 = multiprocessing.Process(target=take_turn, args=(actions, "left", env.board, env.score, shared_list1, iteration_list))
+            p2 = multiprocessing.Process(target=take_turn, args=(actions, "right", env.board, env.score, shared_list2, iteration_list))
+            p3 = multiprocessing.Process(target=take_turn, args=(actions, "up", env.board, env.score, shared_list3, iteration_list))
+            p4 = multiprocessing.Process(target=take_turn, args=(actions, "down", env.board, env.score, shared_list4, iteration_list))
+
+            p1.start()
+            p2.start()
+            p3.start()
+            p4.start()
+      
+            p1.join()
+            p2.join()
+            p3.join()
+            p4.join()
+
+            if len(shared_list1) > 0:
+                scores["left"] = sum(shared_list1)
+                scores["right"] = sum(shared_list2)
+                scores["up"] = sum(shared_list3)
+                scores["down"] = sum(shared_list4)
+                iterations += sum(iteration_list)
+        
+
+            # Implement an AI to play 2048 using simple Monte Carlo search
+            #
+            # The information you have available is the game state (board, score)
+            # 
+            # You control the game by setting the action to either
+            #    'up', 'down', 'left', or 'right'
+    
+            # Number of games to simulate per initial move
+    
+            # Take initial action with highest score
+            if scores:
+                action = max(scores, key=lambda key: scores[key])
+                action_taken = True
+
+        # END OF YOUR CODE
+
+    
+        if action_taken:
+            (board, score), reward, done = env.step(action)
+            action_taken = False
+            steps += 1
+            if np.max(board) == 2048 or done:
+                t2 = time.time()
+                timer = round(t2-t1, 2)
+                print('-----------------------------------')
+                if np.max(board) == 2048:
+                    print("Game complete: True")
+                elif done:
+                    print("Game complete: False")
+
+                result = [num, np.max(board), steps, iterations, timer]
+                print(result)
+
+                csv_file = open(filename, 'a', newline="")
+
+                csv_writer = csv.writer(csv_file)
+                csv_writer.writerow(result)
+                csv_file.close()
+
+                print("Just exported result to 2048_data.csv")
+
+                steps = 0
+                iterations = 0
+                num += 1
+                t1 = time.time()
+                env.reset()   
+
+    env.close()
